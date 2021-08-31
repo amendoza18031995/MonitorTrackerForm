@@ -64,6 +64,7 @@ namespace MonitorTrackerForm
         public static DateTime LastUCaptureupload;
         public static DateTime LastValidateCredentials;
         public static string UserIp = string.Empty;
+        public static scheduleModel schedule;
 
         /***************************************************/
         /*para la api*/
@@ -290,10 +291,10 @@ namespace MonitorTrackerForm
             {
                 client = new HttpClient();
                 //local
-                client.BaseAddress = new Uri("http://194.113.72.223:8090/Api/");
+                client.BaseAddress = new Uri("http://localhost:50221/api/");
 
                 //prod
-                //client.BaseAddress = new Uri("http://25.73.18.157:8085/api/");
+                //client.BaseAddress = new Uri("http://194.113.72.223:8090/Api/");
 
 
                 client.DefaultRequestHeaders.Accept.Clear();
@@ -323,6 +324,60 @@ namespace MonitorTrackerForm
             }
             return null;
         }
+
+        private async Task<bool> CallApischedule(string rute, object obj, string token)
+        {
+            try
+            {
+                client = new HttpClient();
+                //local
+                client.BaseAddress = new Uri("http://localhost:50221/api/");
+
+                //prod
+                //client.BaseAddress = new Uri("http://194.113.72.223:8090/Api/");
+
+
+                client.DefaultRequestHeaders.Accept.Clear();
+                client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                HttpResponseMessage response;
+
+                if (!string.IsNullOrEmpty(token))
+                {
+                    client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+                    var json = new JavaScriptSerializer().Serialize(obj);
+                    response = await client.PostAsJsonAsync(rute, obj);
+                    //response = await client.PostAsJsonAsync(rute, json);                
+                }
+                else
+                {
+                    response = await client.PostAsJsonAsync(rute, obj);
+                    var cont = response.Content;
+                }
+                if (response.IsSuccessStatusCode)
+                {
+                    using (HttpContent content = response.Content)
+                    {
+                        Task<string> result = content.ReadAsStringAsync();
+                        string final = result.Result;
+                        return bool.Parse(final);
+                    }
+                }
+                else
+                {
+                    return false;
+                    //code
+                }
+            }
+            catch (Exception ex)
+            {
+                writelog(ex.Message + " --- " + ex.InnerException.Message, "Error CallApi()");
+                return false;
+            }
+        }
+
+
+
         private async Task<Response> CallApiCapture(string rute, object obj, string token)
         {
             try
@@ -384,20 +439,34 @@ namespace MonitorTrackerForm
                             UploadFrecuency = rep.data.UploadFrecuency;
                             CaptureFrecuency = rep.data.CaptureFrecuency;
 
-                            //sending the hardware installed on the pc
-                            rep = await CallApi("UserHardware/Hardware", SendHardware(), token);
+                            scheduleModel sch = new scheduleModel();
+                            sch.UserName = System.Security.Principal.WindowsIdentity.GetCurrent().Name;
+                            var k = await CallApischedule("schedule/Get", sch, token);
 
-                            //sending intalled programs on thre pc
-                            rep = await CallApi("UserPrograms/Installed", SendInstalledPrograms(), token);
+                            if (k == true)
+                            {
+                                //sending the hardware installed on the pc
+                                rep = await CallApi("UserHardware/Hardware", SendHardware(), token);
 
-                            System.Threading.Thread tKeyloger = new System.Threading.Thread(StartKey);
+                                //sending intalled programs on thre pc
+                                rep = await CallApi("UserPrograms/Installed", SendInstalledPrograms(), token);
 
-                            tKeyloger.Start();
+                                System.Threading.Thread tKeyloger = new System.Threading.Thread(StartKey);
 
-                            this.ShowInTaskbar = false;
-                            System.Threading.Thread.Sleep(5000);
-                            _Tmonitor.Start();
-                            _TmonitorCapture.Start();
+                                tKeyloger.Start();
+
+                                this.ShowInTaskbar = false;
+                                System.Threading.Thread.Sleep(5000);
+                                _Tmonitor.Start();
+                                _TmonitorCapture.Start();
+                            }
+                            else
+                            {
+                                _Tmonitor.Stop();
+                                _TmonitorCapture.Stop();
+                                System.Threading.Thread.Sleep(60000);
+                                GetCredentialsApi();
+                            }
                         }
                         else
                         {
@@ -442,10 +511,12 @@ namespace MonitorTrackerForm
             //WebExceptionStatus exs = new WebExceptionStatus();
             try
             {
+
                 TrackerModel tm = new TrackerModel();
                 tm.token = token;
                 tm.AutomaticTakeTimeModel = lmt;
                 Response rep = new Response();
+
                 rep = await CallApi("TimeTracker/CreateTracker", tm, token);
 
                 if (rep != null)

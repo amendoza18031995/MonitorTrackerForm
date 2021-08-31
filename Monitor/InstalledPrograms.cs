@@ -47,9 +47,16 @@ namespace WebApiAgent.Controllers
                                 
                                 DateTime dateValue;
                                 InstalledProgramsViewModel ip = new InstalledProgramsViewModel();
+                                try
+                                {
+                                    if (DateTime.TryParseExact((string)subkey.GetValue("InstallDate"), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateValue))
+                                        ip.InstalledDate = dateValue;
+                                }
+                                catch (Exception)
+                                {
 
-                                if (DateTime.TryParseExact((string)subkey.GetValue("InstallDate"), "yyyyMMdd", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateValue))
-                                    ip.InstalledDate = dateValue;
+                                }
+                              
 
                                 ip.Name = displayName;
                                 ip.Size = size.ToString();
